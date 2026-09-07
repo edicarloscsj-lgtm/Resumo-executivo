@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema de Ocorrências - ECSJ</title>
+    
+    <!-- Metadados PWA Apple -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ocorrências ECSJ">
+    <meta name="theme-color" content="#1e293b">
+    
+    <!-- Link para o Manifest injetado via JS (Mantido vazio, preenchido pelo script) -->
+    <link id="pwa-manifest" rel="manifest" href="">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; display: flex; flex-direction: column; min-height: 100vh;}
+        
+        .whatsapp-bg { background-color: #00a884; }
+        .whatsapp-hover:hover { background-color: #008f6f; }
+        .whatsapp-preview-bg { background-color: #efeae2; background-image: url('https://w0.peakpx.com/wallpaper/818/148/HD-wallpaper-whatsapp-background-cool-dark-green-light-pattern-soft-texture.jpg'); background-blend-mode: overlay; background-size: cover; opacity: 0.9;}
+        
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .toast-leave { animation: slideOut 0.3s ease-in forwards; }
+        
+        @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+
+        .hidden-tab { display: none !important; }
+        .active-tab { display: block !important; }
+        
+        .tab-btn-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
+        .tab-btn-inactive { color: #64748b; font-weight: 500; }
+        
+        /* Ajuste do PDF Invisível */
+        #pdf-wrapper { position: absolute; left: -9999px; top: 0; background: white; z-index: -100; width: 800px; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <header class="bg-slate-800 text-white shadow-md sticky top-0 z-20">
+        <div class="max-w-5xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center shadow-inner">
+                    <i class="fa-solid fa-clipboard-check text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold leading-tight">Sistema Integrado</h1>
+                    <p class="text-xs text-blue-300 font-medium tracking-wide uppercase">Gestão de Relatórios</p>
+                </div>
+            </div>
+            <div class="text-sm font-medium bg-slate-700/50 px-3 py-1.5 rounded-full border border-slate-600/50">
+                <i class="fa-regular fa-clock mr-1"></i> <span id="currentDate"></span>
+            </div>
+        </div>
+        
+        <!-- Botão de Instalação PWA (Oculto por padrão) -->
+        <div id="installAppContainer" class="max-w-5xl mx-auto px-4 mt-2 hidden">
+            <button id="btnInstallApp" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2 transition-colors">
+                <i class="fa-solid fa-download"></i> Instalar Aplicativo ECSJ
+            </button>
+        </div>
+        
+        <!-- Abas -->
+        <div class="max-w-5xl mx-auto px-4 mt-2 flex gap-4 border-b border-slate-700">
+            <button onclick="switchTab('text')" id="tab-text" class="pb-2 px-1 tab-btn-active transition-colors">
+                <i class="fa-solid fa-pen-to-square mr-1"></i> Formulário e PDF
+            </button>
+            <button onclick="switchTab('collage')" id="tab-collage" class="pb-2 px-1 tab-btn-inactive transition-colors hover:text-slate-300">
+                <i class="fa-solid fa-images mr-1"></i> Colagem de Fotos
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 mb-16">
+        
+        <!-- ABA TEXTO -->
+        <div id="content-text" class="active-tab flex flex-col lg:flex-row gap-6">
+            
+            <!-- Coluna do Formulário -->
+            <section class="flex-1 flex flex-col gap-5">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-5 sm:p-6 flex flex-col gap-5">
+                        
+                        <!-- Linha 1: Tipo -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Tipo de Registro <span class="text-red-500">*</span></label>
+                            <select id="tipo" class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none font-medium">
+                                <option value="OCORRÊNCIA">🚨 Ocorrência Padrão</option>
+                                <option value="EMERGÊNCIA">🆘 Ocorrência Emergencial</option>
+                                <option value="ROTINA">📋 Rotina / Check-list</option>
+                                <option value="MATERIAL">📦 Movimentação de Material</option>
+                                <option value="MANUTENÇÃO PREVENTIVA">🛠️ Manutenção Preventiva</option>
+                                <option value="MANUTENÇÃO PREDITIVA">🔍 Manutenção Preditiva</option>
+                                <option value="MANUTENÇÃO CORRETIVA">🔧 Manutenção Corretiva</option>
+                                <option value="COMUNICADO">📢 Comunicado Geral</option>
+                            </select>
+                            <p id="tipo-desc" class="text-xs text-slate-500 italic mt-2 bg-slate-100 p-2 rounded border border-slate-200">
+                                Relato de evento anômalo ou fora do padrão que exige atenção.
+                            </p>
+                        </div>
+
+                        <!-- Linha 2: Data e Local -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Data e Hora <span class="text-red-500">*</span></label>
+                                <input type="datetime-local" id="data" class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Local / Setor <span class="text-red-500">*</span></label>
+                                <input type="text" id="local" placeholder="Ex: Pátio Principal, Portaria..." class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none">
+                            </div>
+                        </div>
+
+                        <!-- Linha 3: Relator e Assunto -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Relator (Responsável) <span class="text-red-500">*</span></label>
+                                <input type="text" id="relator" placeholder="Seu nome" class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Assunto / Título <span class="text-red-500">*</span></label>
+                                <input type="text" id="ocorrencia" placeholder="Título breve do evento" class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none">
+                            </div>
+                        </div>
+
+                        <!-- Linha 4: Detalhamento -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Detalhamento <span class="text-red-500">*</span></label>
+                            <textarea id="detalhamento" rows="4" placeholder="Descreva o que aconteceu de forma clara e objetiva..." class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none resize-none"></textarea>
+                        </div>
+
+                        <!-- Linha 5: Ações -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Ações Tomadas / Próximos Passos</label>
+                            <textarea id="acoes" rows="2" placeholder="O que foi feito? Quem foi acionado? (Opcional)" class="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 transition-colors outline-none resize-none"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="w-full lg:w-[400px] xl:w-[450px] flex flex-col gap-4">
+                
+                <!-- Celular Preview -->
+                <div class="whatsapp-preview-bg rounded-2xl shadow-inner border border-slate-300 p-4 sm:p-5 flex flex-col h-[400px] lg:h-auto overflow-hidden relative">
+                    <div class="absolute inset-0 bg-black/5 z-0"></div>
+                    <div class="text-xs font-semibold text-center text-slate-600 mb-3 bg-white/70 py-1 px-3 rounded-full self-center z-10 shadow-sm backdrop-blur-sm">
+                        Pré-visualização
+                    </div>
+                    
+                    <div class="bg-[#d9fdd3] rounded-lg p-3 shadow-sm w-[90%] sm:w-[95%] self-end relative z-10" style="border-top-right-radius: 0;">
+                        <span class="absolute top-0 right-[-8px] text-[#d9fdd3]">
+                            <svg viewBox="0 0 8 13" width="8" height="13" class="fill-current"><path opacity=".13" d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"></path><path opacity=".02" d="M5.188 1.25H0v11.193l6.467-8.625C7.526 2.406 6.958 1.25 5.188 1.25z"></path><path d="M5.188 1.5H0v11.193l6.467-8.625C7.526 2.656 6.958 1.5 5.188 1.5z"></path></svg>
+                        </span>
+                        
+                        <div id="previewContent" class="text-[14px] leading-[1.3] text-[#111b21] whitespace-pre-wrap break-words font-sans">
+                            <!-- Conteúdo injetado via JS -->
+                        </div>
+                        <div class="text-[11px] text-[#667781] text-right mt-1 float-right flex items-center gap-1">
+                            <span id="previewTime">12:00</span>
+                            <i class="fa-solid fa-check-double text-[#53bdeb]"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botoes de Ação -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col gap-3">
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button id="btnCopiar" class="flex-1 px-4 py-3 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-medium rounded-xl transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-slate-400">
+                            <i class="fa-regular fa-copy text-lg"></i>
+                            Copiar Texto
+                        </button>
+                        
+                        <button id="btnWhatsApp" class="flex-1 px-4 py-3 whatsapp-bg whatsapp-hover text-white font-medium rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <i class="fa-brands fa-whatsapp text-xl"></i>
+                            WhatsApp
+                        </button>
+                    </div>
+                    <button id="btnGerarPDF" class="w-full px-4 py-3 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-slate-700">
+                        <i class="fa-solid fa-file-pdf text-xl text-red-400"></i>
+                        Gerar Relatório em PDF <span class="text-xs font-normal opacity-80">(Inclui Fotos)</span>
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <div id="content-collage" class="hidden-tab">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-8">
+                <div class="text-center max-w-lg mx-auto mb-8">
+                    <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa-solid fa-camera-retro text-2xl"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-800 mb-2">Montagem Fotográfica</h2>
+                    <p class="text-sm text-slate-500">Selecione de 2 a 9 fotos. O sistema montará uma única imagem automaticamente, ideal para anexar ao PDF ou enviar no grupo.</p>
+                </div>
+
+                <div class="border-2 border-dashed border-slate-300 rounded-2xl p-6 sm:p-10 text-center hover:bg-slate-50 transition-colors relative">
+                    <input type="file" id="imageInput" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" title="Clique para selecionar fotos">
+                    <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-400 mb-3"></i>
+                    <h3 class="text-lg font-semibold text-slate-700 mb-1">Toque aqui para escolher as fotos</h3>
+                    <p class="text-xs text-slate-500">Arquivos suportados: JPG, PNG, HEIC</p>
+                </div>
+
+                <!-- Miniaturas das fotos selecionadas -->
+                <div id="thumbnailsContainer" class="mt-6 flex flex-wrap gap-4 justify-center"></div>
+
+                <!-- Canvas Oculto (usado para gerar a imagem final) -->
+                <div class="hidden mt-8 flex-col items-center" id="collageResultContainer">
+                    <p class="text-sm font-semibold text-slate-600 mb-3">Prévia da Montagem:</p>
+                    <canvas id="collageCanvas" class="max-w-full rounded shadow border border-slate-200"></canvas>
+                    <button id="btnDownloadCollage" class="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-download"></i> Baixar Imagem Única
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="pdf-wrapper">
+        <div id="pdf-content" class="bg-white text-black p-10 font-sans mx-auto" style="min-height: 1122px; position: relative;">
+            
+            <div class="border-b-2 border-slate-800 pb-4 mb-6 flex justify-between items-end">
+                <div>
+                    <h1 class="text-2xl font-bold uppercase" id="pdf-title-type">RELATÓRIO DE OCORRÊNCIA</h1>
+                    <p class="text-slate-500 text-sm mt-1">Sistema Integrado de Gestão - ECSJ</p>
+                </div>
+                <div class="text-right text-sm">
+                    <p><span class="font-semibold">Data do Evento:</span> <span id="pdf-val-data"></span></p>
+                    <p><span class="font-semibold">Gerado em:</span> <span id="pdf-val-geracao"></span></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6 text-sm">
+                <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                    <span class="block text-slate-500 text-xs font-bold mb-1">LOCAL / SETOR</span>
+                    <span id="pdf-val-local" class="font-medium text-base text-slate-800"></span>
+                </div>
+                <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                    <span class="block text-slate-500 text-xs font-bold mb-1">RESPONSÁVEL (RELATOR)</span>
+                    <span id="pdf-val-relator" class="font-medium text-base text-slate-800"></span>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h2 class="text-xs font-bold text-slate-500 mb-2 border-b border-slate-200 pb-1">ASSUNTO / TÍTULO</h2>
+                <p id="pdf-val-assunto" class="font-semibold text-lg text-slate-800"></p>
+            </div>
+
+            <div class="mb-6">
+                <h2 class="text-xs font-bold text-slate-500 mb-2 border-b border-slate-200 pb-1">DETALHAMENTO</h2>
+                <p id="pdf-val-detalhamento" class="whitespace-pre-wrap text-justify leading-relaxed text-slate-700"></p>
+            </div>
+
+            <div id="pdf-box-acoes" class="mb-8">
+                <h2 class="text-xs font-bold text-slate-500 mb-2 border-b border-slate-200 pb-1">AÇÕES TOMADAS / OBSERVAÇÕES</h2>
+                <p id="pdf-val-acoes" class="whitespace-pre-wrap text-justify leading-relaxed text-slate-700"></p>
+            </div>
+
+            <!-- Container da Imagem no PDF -->
+            <div id="pdf-box-imagem" class="mt-8 page-break-inside-avoid" style="display: none;">
+                <h2 class="text-xs font-bold text-slate-500 mb-4 border-b border-slate-200 pb-1">REGISTRO FOTOGRÁFICO ANEXO</h2>
+                <div class="flex justify-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
+                    <img id="pdf-img-render" src="" alt="Registro Fotográfico" class="max-w-full shadow-sm" style="max-height: 400px; object-fit: contain;">
+                </div>
+            </div>
+            
+            <div class="absolute bottom-10 left-10 right-10 pt-4 border-t border-slate-200 text-center text-slate-400 text-xs">
+                Documento gerado eletronicamente pelo Sistema ECSJ.
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-white border-t border-slate-200 py-4 fixed bottom-0 w-full z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div class="max-w-5xl mx-auto px-4 text-center">
+            <p class="text-sm text-slate-500 font-medium">
+                Desenvolvido por <span class="font-bold text-blue-600 tracking-wide">ECSJ</span> © <span id="currentYear"></span>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Contêiner de Notificações (Toasts) -->
+    <div id="toastContainer" class="fixed top-20 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        let deferredPrompt;
+        
+        (function setupPWA() {
+            // 1. Criar Manifest via Data URI (Mais compatível que Blob para manifest)
+            const manifest = {
+                name: "Sistema de Relatórios ECSJ",
+                short_name: "Ocorrências ECSJ",
+                description: "Aplicativo de gestão de relatórios padronizados.",
+                start_url: location.href,
+                display: "standalone",
+                background_color: "#1e293b",
+                theme_color: "#1e293b",
+                icons: [
+                    {
+                        src: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%231e293b'/%3E%3Cpath d='M362.6 192.9L245 314l-89.6-91.5c-10.9-11.1-28.7-11.4-39.9-.6-11.3 10.9-11.4 28.7-.2 39.9l109.2 111.6c11.3 11.5 30.1 11.4 41.2-.2l137.5-141.2c11.1-11.4 10.7-29.3-.8-40.4-11.3-11-28.8-10.5-39.8.7z' fill='%233b82f6'/%3E%3C/svg%3E",
+                        sizes: "512x512",
+                        type: "image/svg+xml",
+                        purpose: "any maskable"
+                    }
+                ]
+            };
+            
+            const manifestData = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
+            document.getElementById('pwa-manifest').href = manifestData;
+
+            // 2. Criar Service Worker Dinâmico (Necessário para disparo do PWA Install Prompt)
+            // Nota: SWs em URLs Blob podem ter problemas de escopo no Chrome, mas é a única via "One-File"
+            if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+                const swCode = `
+                    self.addEventListener('install', (e) => { self.skipWaiting(); });
+                    self.addEventListener('activate', (e) => { self.clients.claim(); });
+                    self.addEventListener('fetch', (e) => {
+                        e.respondWith(fetch(e.request).catch(() => new Response('Modo Offline: Verifique sua conexão.')));
+                    });
+                `;
+                const swBlob = new Blob([swCode], {type: 'application/javascript'});
+                const swUrl = URL.createObjectURL(swBlob);
+                
+                navigator.serviceWorker.register(swUrl).then((registration) => {
+                    console.log('PWA Service Worker Registrado.');
+                }).catch((error) => {
+                    console.log('SW não registrado (Normal se estiver usando file://):', error);
+                });
+            }
+        })();
+
+        // Lógica do Botão de Instalação (Só aparece quando hospedado corretamente)
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Previne o prompt automático padrão
+            e.preventDefault();
+            // Guarda o evento para ser disparado pelo botão
+            deferredPrompt = e;
+            // Mostra o botão no cabeçalho
+            document.getElementById('installAppContainer').classList.remove('hidden');
+        });
+
+        document.getElementById('btnInstallApp')?.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    document.getElementById('installAppContainer').classList.add('hidden');
+                }
+                deferredPrompt = null;
+            }
+        });
+
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+        
+        function atualizarRelogio() {
+            const agora = new Date();
+            const dataStr = agora.toLocaleDateString('pt-BR');
+            const horaStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('currentDate').textContent = `${dataStr} - ${horaStr}`;
+            document.getElementById('previewTime').textContent = horaStr;
+        }
+        setInterval(atualizarRelogio, 60000);
+        atualizarRelogio();
+
+        function setNow() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('data').value = now.toISOString().slice(0,16);
+        }
+        setNow();
+
+        function switchTab(tab) {
+            document.getElementById('content-text').classList.remove('active-tab');
+            document.getElementById('content-text').classList.add('hidden-tab');
+            document.getElementById('content-collage').classList.remove('active-tab');
+            document.getElementById('content-collage').classList.add('hidden-tab');
+            
+            document.getElementById('tab-text').classList.replace('tab-btn-active', 'tab-btn-inactive');
+            document.getElementById('tab-collage').classList.replace('tab-btn-active', 'tab-btn-inactive');
+            
+            if (tab === 'text') {
+                document.getElementById('content-text').classList.replace('hidden-tab', 'active-tab');
+                document.getElementById('tab-text').classList.replace('tab-btn-inactive', 'tab-btn-active');
+            } else {
+                document.getElementById('content-collage').classList.replace('hidden-tab', 'active-tab');
+                document.getElementById('tab-collage').classList.replace('tab-btn-inactive', 'tab-btn-active');
+            }
+        }
+
+        const descricoes = {
+            "OCORRÊNCIA": "Relato de evento anômalo ou fora do padrão que exige atenção da equipe.",
+            "EMERGÊNCIA": "⚠️ EXIGE AÇÃO RÁPIDA! Riscos à segurança operacional (Ex: Biruta rasgada, porta arrombada, incêndio, vazamento grave).",
+            "ROTINA": "Registro de conferência diária, inspeção padrão ou check-list do turno.",
+            "MATERIAL": "Registro de recebimento, saída ou envio de material (Ex: Envio de extintores para recarga).",
+            "MANUTENÇÃO PREVENTIVA": "Ação agendada para EVITAR falhas (Ex: Lubrificação mensal, limpeza de filtros, troca de óleo por horas de uso).",
+            "MANUTENÇÃO PREDITIVA": "Acompanhamento para PREVER falhas (Ex: Medição de temperatura, análise de vibração em motores antes que quebrem).",
+            "MANUTENÇÃO CORRETIVA": "Ação realizada APÓS a quebra. O equipamento parou ou apresentou defeito e precisou de conserto.",
+            "COMUNICADO": "Aviso geral ou repasse de informações importantes para a equipe/gestão."
+        };
+
+        const configTitulos = {
+            "OCORRÊNCIA": { emoji: "🚨", prefixo: "REGISTRO DE OCORRÊNCIA" },
+            "EMERGÊNCIA": { emoji: "🆘", prefixo: "ALERTA DE EMERGÊNCIA" },
+            "ROTINA": { emoji: "📋", prefixo: "REGISTRO DE ROTINA" },
+            "MATERIAL": { emoji: "📦", prefixo: "REGISTRO DE MATERIAL" },
+            "MANUTENÇÃO PREVENTIVA": { emoji: "🛠️", prefixo: "MANUTENÇÃO PREVENTIVA" },
+            "MANUTENÇÃO PREDITIVA": { emoji: "🔍", prefixo: "MANUTENÇÃO PREDITIVA" },
+            "MANUTENÇÃO CORRETIVA": { emoji: "🔧", prefixo: "MANUTENÇÃO CORRETIVA" },
+            "COMUNICADO": { emoji: "📢", prefixo: "COMUNICADO GERAL" }
+        };
+
+        const inputs = ['tipo', 'data', 'local', 'relator', 'ocorrencia', 'detalhamento', 'acoes'];
+        inputs.forEach(id => {
+            document.getElementById(id).addEventListener('input', atualizarPreview);
+        });
+
+        function formatarData(dataStr) {
+            if (!dataStr) return '';
+            const data = new Date(dataStr);
+            return data.toLocaleDateString('pt-BR') + ' às ' + data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function gerarTexto() {
+            const tipo = document.getElementById('tipo').value;
+            const data = document.getElementById('data').value;
+            const local = document.getElementById('local').value.trim();
+            const relator = document.getElementById('relator').value.trim();
+            const ocorrencia = document.getElementById('ocorrencia').value.trim();
+            const detalhamento = document.getElementById('detalhamento').value.trim();
+            const acoes = document.getElementById('acoes').value.trim();
+
+            const config = configTitulos[tipo];
+            
+            // Atualiza a legenda de ajuda na tela
+            document.getElementById('tipo-desc').textContent = descricoes[tipo];
+
+            let texto = `*${config.emoji} ${config.prefixo}*\n\n`;
+            texto += `*DATA/HORA:* ${formatarData(data)}\n`;
+            texto += `*LOCAL:* ${local}\n`;
+            texto += `*RELATOR:* ${relator}\n`;
+            texto += `*ASSUNTO:* ${ocorrencia}\n\n`;
+            texto += `*DETALHAMENTO:*\n${detalhamento}\n`;
+
+            if (acoes) {
+                texto += `\n*AÇÕES / OBSERVAÇÕES:*\n${acoes}\n`;
+            }
+
+            return texto;
+        }
+
+        function atualizarPreview() {
+            const textoRaw = gerarTexto();
+            const textoHTML = textoRaw
+                .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+            document.getElementById('previewContent').innerHTML = textoHTML;
+        }
+        
+        // Chamada inicial para popular o preview
+        atualizarPreview();
+
+        document.getElementById('btnCopiar').addEventListener('click', () => {
+            const texto = gerarTexto();
+            const textarea = document.createElement('textarea');
+            textarea.value = texto;
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast('Texto copiado com sucesso!');
+            } catch (err) {
+                showToast('Erro ao copiar texto.', 'error');
+            }
+            document.body.removeChild(textarea);
+        });
+
+        document.getElementById('btnWhatsApp').addEventListener('click', () => {
+            const texto = gerarTexto();
+            const textoEncode = encodeURIComponent(texto);
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            // Lógica unificada: tenta abrir a URL wa.me, o sistema operacional lida se abre web ou app
+            window.open(`https://wa.me/?text=${textoEncode}`, '_blank');
+        });
+
+        const imageInput = document.getElementById('imageInput');
+        const thumbnailsContainer = document.getElementById('thumbnailsContainer');
+        const collageCanvas = document.getElementById('collageCanvas');
+        const ctx = collageCanvas.getContext('2d');
+        const collageResultContainer = document.getElementById('collageResultContainer');
+        const btnDownloadCollage = document.getElementById('btnDownloadCollage');
+
+        let selectedImages = []; // Armazena os objetos Image carregados
+
+        imageInput.addEventListener('change', handleImageUpload);
+
+        function handleImageUpload(e) {
+            const files = Array.from(e.target.files);
+            
+            if (files.length === 0) return;
+            if (selectedImages.length + files.length > 9) {
+                showToast('Selecione no máximo 9 fotos.', 'error');
+                return;
+            }
+
+            let loadedCount = 0;
+            files.forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        selectedImages.push({
+                            id: Date.now() + Math.random(),
+                            element: img
+                        });
+                        loadedCount++;
+                        if (loadedCount === files.length) {
+                            updateThumbnails();
+                            generateCollage();
+                        }
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+            // Reset do input
+            imageInput.value = '';
+        }
+
+        function updateThumbnails() {
+            thumbnailsContainer.innerHTML = '';
+            selectedImages.forEach(imgObj => {
+                const div = document.createElement('div');
+                div.className = 'relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-300 shadow-sm group';
+                
+                const thumb = document.createElement('img');
+                thumb.src = imgObj.element.src;
+                thumb.className = 'w-full h-full object-cover';
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                removeBtn.className = 'absolute top-1 right-1 bg-red-500/90 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 focus:outline-none';
+                removeBtn.onclick = () => removeImage(imgObj.id);
+
+                div.appendChild(thumb);
+                div.appendChild(removeBtn);
+                thumbnailsContainer.appendChild(div);
+            });
+        }
+
+        function removeImage(id) {
+            selectedImages = selectedImages.filter(img => img.id !== id);
+            updateThumbnails();
+            generateCollage();
+        }
+
+        function generateCollage() {
+            if (selectedImages.length === 0) {
+                collageResultContainer.classList.add('hidden');
+                document.getElementById('pdf-box-imagem').style.display = 'none';
+                return;
+            }
+
+            collageResultContainer.classList.remove('hidden');
+            collageResultContainer.classList.add('flex');
+
+            const count = selectedImages.length;
+            let cols = 1;
+            let rows = 1;
+
+            if (count === 2) { cols = 2; rows = 1; }
+            else if (count === 3 || count === 4) { cols = 2; rows = 2; }
+            else if (count === 5 || count === 6) { cols = 3; rows = 2; }
+            else if (count >= 7) { cols = 3; rows = 3; }
+
+            const cellWidth = 800;
+            const cellHeight = 800;
+            const spacing = 15;
+            
+            collageCanvas.width = (cols * cellWidth) + ((cols + 1) * spacing);
+            collageCanvas.height = (rows * cellHeight) + ((rows + 1) * spacing);
+
+            // Fundo branco
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, collageCanvas.width, collageCanvas.height);
+
+            selectedImages.forEach((imgObj, index) => {
+                const col = index % cols;
+                const row = Math.floor(index / cols);
+
+                const x = spacing + col * (cellWidth + spacing);
+                const y = spacing + row * (cellHeight + spacing);
+
+                const img = imgObj.element;
+                const imgRatio = img.width / img.height;
+                const cellRatio = cellWidth / cellHeight;
+
+                let sWidth = img.width;
+                let sHeight = img.height;
+                let sx = 0;
+                let sy = 0;
+
+                // Object-fit: cover logic
+                if (imgRatio > cellRatio) {
+                    sWidth = img.height * cellRatio;
+                    sx = (img.width - sWidth) / 2;
+                } else {
+                    sHeight = img.width / cellRatio;
+                    sy = (img.height - sHeight) / 2;
+                }
+
+                ctx.drawImage(img, sx, sy, sWidth, sHeight, x, y, cellWidth, cellHeight);
+            });
+        }
+
+        btnDownloadCollage.addEventListener('click', downloadCollage);
+
+        function downloadCollage() {
+            if(selectedImages.length === 0) return;
+            
+            let titulo = document.getElementById('ocorrencia').value.trim();
+            titulo = titulo ? titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'ocorrencia';
+            
+            const link = document.createElement('a');
+            link.download = `fotos_${titulo}.jpg`;
+            link.href = collageCanvas.toDataURL('image/jpeg', 0.9);
+            link.click();
+            showToast('Montagem baixada com sucesso!');
+        }
+
+        document.getElementById('btnGerarPDF').addEventListener('click', () => {
+            const tipo = document.getElementById('tipo').value;
+            const relator = document.getElementById('relator').value.trim();
+            const dataRaw = document.getElementById('data').value;
+            const local = document.getElementById('local').value.trim();
+            const ocorrencia = document.getElementById('ocorrencia').value.trim();
+            const detalhamento = document.getElementById('detalhamento').value.trim();
+            const acoes = document.getElementById('acoes').value.trim();
+
+            if (!ocorrencia || !detalhamento || !local || !relator) {
+                showToast('Preencha os campos obrigatórios (*) antes de gerar o PDF', 'error');
+                return;
+            }
+
+            showToast('Gerando documento PDF, aguarde...', 'info');
+
+            // 1. Preencher os dados no template oculto do PDF
+            const config = configTitulos[tipo];
+            document.getElementById('pdf-title-type').textContent = config.prefixo;
+            document.getElementById('pdf-val-data').textContent = formatarData(dataRaw);
+            
+            const now = new Date();
+            document.getElementById('pdf-val-geracao').textContent = now.toLocaleString('pt-BR');
+            
+            document.getElementById('pdf-val-local').textContent = local;
+            document.getElementById('pdf-val-relator').textContent = relator;
+            document.getElementById('pdf-val-assunto').textContent = ocorrencia;
+            document.getElementById('pdf-val-detalhamento').textContent = detalhamento;
+            
+            const boxAcoes = document.getElementById('pdf-box-acoes');
+            if (acoes) {
+                document.getElementById('pdf-val-acoes').textContent = acoes;
+                boxAcoes.style.display = 'block';
+            } else {
+                boxAcoes.style.display = 'none';
+            }
+
+            // 2. Tratar Imagens
+            const boxImagem = document.getElementById('pdf-box-imagem');
+            const imgRender = document.getElementById('pdf-img-render');
+            
+            if (selectedImages.length > 0) {
+                generateCollage(); 
+                imgRender.src = collageCanvas.toDataURL('image/jpeg', 0.85); // Qualidade 85% para não estourar tamanho do PDF
+                boxImagem.style.display = 'block';
+            } else {
+                boxImagem.style.display = 'none';
+                imgRender.src = "";
+            }
+
+            // 3. Configurar e gerar o PDF
+            const elementoPDF = document.getElementById('pdf-content');
+            
+            let dataFormatadaArquivo = formatarData(dataRaw).split(' ')[0].replace(/\//g, '-');
+            let nomeArquivo = `Relatorio_${tipo}_${dataFormatadaArquivo}.pdf`;
+
+            const opt = {
+                margin:       [10, 10, 10, 10], // mm
+                filename:     nomeArquivo,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, logging: false },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            // Gera PDF baseado no conteúdo
+            html2pdf().set(opt).from(elementoPDF).save().then(() => {
+                showToast('PDF baixado com sucesso!');
+            }).catch(err => {
+                showToast('Erro ao gerar PDF.', 'error');
+                console.error(err);
+            });
+        });
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let colorClasses = type === 'success' ? 'bg-emerald-500 text-white' : 
+                               type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white';
+            let icon = type === 'success' ? 'fa-check-circle' : 
+                       type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info';
+                       
+            toast.className = `toast-enter ${colorClasses} px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 text-sm font-medium pointer-events-auto max-w-xs`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-lg"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-leave');
+                setTimeout(() => {
+                    if (toast.parentNode === container) {
+                        container.removeChild(toast);
+                    }
+                }, 300); // tempo da animacao de saida
+            }, 3500); // tempo exibido
+        }
+    </script>
+</body>
+</html>
